@@ -200,3 +200,9 @@ SELECT * FROM heatmap_stats ORDER BY dow, hour_of_day;
 **speedtest-cli retorna erro?**
 → Confirme acesso à internet do container:
   `docker compose exec collector curl -I https://www.speedtest.net`
+
+---
+
+## 👨‍💻 Desenvolvedor
+
+- Rafael Maia
