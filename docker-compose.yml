@@ -1,0 +1,80 @@
+version: '3.8'
+
+services:
+  db:
+    image: postgres:15-alpine
+    container_name: netwatch_db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: netwatch
+      POSTGRES_USER: netwatch
+      POSTGRES_PASSWORD: netwatch_secret
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./backend/init.sql:/docker-entrypoint-initdb.d/init.sql
+    networks:
+      - netwatch_net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U netwatch"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  collector:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.collector
+    container_name: netwatch_collector
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DB_HOST: db
+      DB_PORT: 5432
+      DB_NAME: netwatch
+      DB_USER: netwatch
+      DB_PASSWORD: netwatch_secret
+      TEST_INTERVAL_MINUTES: 15
+    networks:
+      - netwatch_net
+
+  api:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.api
+    container_name: netwatch_api
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DB_HOST: db
+      DB_PORT: 5432
+      DB_NAME: netwatch
+      DB_USER: netwatch
+      DB_PASSWORD: netwatch_secret
+    ports:
+      - "8000:8000"
+    networks:
+      - netwatch_net
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: netwatch_frontend
+    restart: unless-stopped
+    depends_on:
+      - api
+    ports:
+      - "3000:80"
+    networks:
+      - netwatch_net
+
+networks:
+  netwatch_net:
+    driver: bridge
+
+volumes:
+  postgres_data:

@@ -1,0 +1,679 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>NetWatch — Monitoramento de Rede</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet"/>
+<style>
+:root {
+  --bg:        #0b0e17;
+  --bg2:       #111520;
+  --bg3:       #181d2e;
+  --border:    rgba(255,255,255,0.07);
+  --accent:    #3b82f6;
+  --accent2:   #06b6d4;
+  --accent3:   #8b5cf6;
+  --green:     #10b981;
+  --red:       #ef4444;
+  --orange:    #f59e0b;
+  --text:      #e2e8f0;
+  --muted:     #64748b;
+  --card-glow: rgba(59,130,246,0.08);
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: 'Syne', sans-serif;
+  min-height: 100vh;
+}
+
+/* ── Header ── */
+header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 18px 32px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg2);
+  position: sticky; top: 0; z-index: 100;
+}
+.logo { display: flex; align-items: center; gap: 12px; }
+.logo-icon {
+  width: 36px; height: 36px; border-radius: 8px;
+  background: linear-gradient(135deg, var(--accent), var(--accent3));
+  display: flex; align-items: center; justify-content: center;
+  font-size: 18px;
+}
+.logo-text { font-size: 20px; font-weight: 800; letter-spacing: -0.5px; }
+.logo-text span { color: var(--accent); }
+
+.header-right { display: flex; align-items: center; gap: 16px; }
+
+.live-badge {
+  display: flex; align-items: center; gap: 6px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px; color: var(--green);
+  background: rgba(16,185,129,0.1);
+  border: 1px solid rgba(16,185,129,0.25);
+  padding: 4px 10px; border-radius: 20px;
+}
+.live-dot {
+  width: 6px; height: 6px; border-radius: 50%;
+  background: var(--green);
+  animation: pulse-dot 1.5s ease-in-out infinite;
+}
+@keyframes pulse-dot {
+  0%,100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.4; transform: scale(0.8); }
+}
+
+.period-selector { display: flex; gap: 4px; }
+.period-btn {
+  background: none; border: 1px solid var(--border);
+  color: var(--muted); font-family: 'Syne', sans-serif;
+  font-size: 12px; padding: 5px 12px; border-radius: 6px;
+  cursor: pointer; transition: all .2s;
+}
+.period-btn.active, .period-btn:hover {
+  background: var(--accent); border-color: var(--accent);
+  color: #fff;
+}
+
+/* ── Layout ── */
+main { padding: 24px 32px; }
+
+.kpi-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 16px;
+  margin-bottom: 24px;
+}
+
+.kpi-card {
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 20px;
+  position: relative; overflow: hidden;
+  transition: border-color .2s, transform .15s;
+}
+.kpi-card:hover { border-color: rgba(59,130,246,0.35); transform: translateY(-1px); }
+.kpi-card::before {
+  content: '';
+  position: absolute; top: 0; left: 0; right: 0; height: 2px;
+}
+.kpi-card.blue::before  { background: linear-gradient(90deg, var(--accent), var(--accent2)); }
+.kpi-card.purple::before { background: linear-gradient(90deg, var(--accent3), #ec4899); }
+.kpi-card.green::before  { background: var(--green); }
+.kpi-card.orange::before { background: var(--orange); }
+.kpi-card.red::before    { background: var(--red); }
+
+.kpi-label { font-size: 11px; text-transform: uppercase; letter-spacing: 1px; color: var(--muted); margin-bottom: 8px; }
+.kpi-value {
+  font-size: 32px; font-weight: 800; line-height: 1;
+  font-family: 'JetBrains Mono', monospace;
+}
+.kpi-unit { font-size: 13px; font-weight: 400; color: var(--muted); margin-left: 3px; }
+.kpi-sub  { font-size: 11px; color: var(--muted); margin-top: 6px; }
+.kpi-trend { font-size: 11px; margin-top: 4px; }
+.kpi-trend.up   { color: var(--green); }
+.kpi-trend.down { color: var(--red); }
+
+/* ── Charts grid ── */
+.charts-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  grid-template-rows: auto auto;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+.chart-full  { grid-column: 1 / -1; }
+.chart-card {
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 20px;
+}
+.chart-card h3 {
+  font-size: 13px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: 0.8px; color: var(--muted); margin-bottom: 16px;
+  display: flex; align-items: center; gap: 8px;
+}
+.chart-card h3 .dot {
+  width: 8px; height: 8px; border-radius: 50%;
+}
+.chart-wrap { position: relative; }
+
+/* ── Heatmap ── */
+.heatmap-grid {
+  display: grid;
+  grid-template-columns: 48px repeat(24, 1fr);
+  gap: 2px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 9px;
+}
+.hm-cell {
+  height: 24px; border-radius: 3px;
+  display: flex; align-items: center; justify-content: center;
+  color: var(--muted);
+}
+.hm-label { color: var(--muted); font-size: 9px; }
+.hm-data  { transition: opacity .2s; cursor: default; }
+.hm-data:hover { filter: brightness(1.4); }
+
+/* ── Outages table ── */
+.bottom-row {
+  display: grid;
+  grid-template-columns: 1fr 340px;
+  gap: 16px;
+}
+.outages-table {
+  width: 100%; border-collapse: collapse;
+  font-size: 12px;
+}
+.outages-table th {
+  font-size: 10px; text-transform: uppercase; letter-spacing: 1px;
+  color: var(--muted); padding: 8px 12px; text-align: left;
+  border-bottom: 1px solid var(--border);
+}
+.outages-table td {
+  padding: 10px 12px;
+  border-bottom: 1px solid rgba(255,255,255,0.04);
+  font-family: 'JetBrains Mono', monospace; font-size: 11px;
+}
+.outages-table tr:last-child td { border-bottom: none; }
+.badge {
+  display: inline-block; padding: 2px 8px; border-radius: 4px;
+  font-size: 10px; font-weight: 600; text-transform: uppercase;
+}
+.badge-error   { background: rgba(239,68,68,.15);   color: var(--red); }
+.badge-timeout { background: rgba(245,158,11,.15); color: var(--orange); }
+
+/* ── Sparkline ── */
+#sparkWrap { padding: 0; }
+
+/* ── Loading overlay ── */
+#loading {
+  position: fixed; inset: 0;
+  background: var(--bg);
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  gap: 16px; z-index: 999;
+  transition: opacity .5s;
+}
+#loading.hidden { opacity: 0; pointer-events: none; }
+.spinner {
+  width: 40px; height: 40px;
+  border: 3px solid var(--border);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: spin .8s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+#loading p { font-size: 13px; color: var(--muted); }
+
+/* ── Responsive ── */
+@media(max-width: 900px) {
+  main { padding: 16px; }
+  .charts-grid { grid-template-columns: 1fr; }
+  .bottom-row  { grid-template-columns: 1fr; }
+}
+</style>
+</head>
+<body>
+
+<div id="loading">
+  <div class="spinner"></div>
+  <p>Carregando dados de rede…</p>
+</div>
+
+<header>
+  <div class="logo">
+    <div class="logo-icon">📡</div>
+    <div class="logo-text">Net<span>Watch</span></div>
+  </div>
+  <div class="header-right">
+    <div class="live-badge">
+      <div class="live-dot"></div>
+      <span id="lastUpdate">—</span>
+    </div>
+    <div class="period-selector">
+      <button class="period-btn" onclick="setPeriod(7)"  data-p="7">7d</button>
+      <button class="period-btn active" onclick="setPeriod(30)" data-p="30">30d</button>
+      <button class="period-btn" onclick="setPeriod(60)" data-p="60">60d</button>
+      <button class="period-btn" onclick="setPeriod(90)" data-p="90">90d</button>
+    </div>
+  </div>
+</header>
+
+<main>
+  <!-- KPI Row -->
+  <div class="kpi-row">
+    <div class="kpi-card blue">
+      <div class="kpi-label">↓ Download Médio</div>
+      <div class="kpi-value" id="kpi-dl">—<span class="kpi-unit">Mbps</span></div>
+      <div class="kpi-sub" id="kpi-dl-max"></div>
+    </div>
+    <div class="kpi-card purple">
+      <div class="kpi-label">↑ Upload Médio</div>
+      <div class="kpi-value" id="kpi-ul">—<span class="kpi-unit">Mbps</span></div>
+      <div class="kpi-sub" id="kpi-ul-max"></div>
+    </div>
+    <div class="kpi-card green">
+      <div class="kpi-label">⏱ Ping Médio</div>
+      <div class="kpi-value" id="kpi-ping">—<span class="kpi-unit">ms</span></div>
+      <div class="kpi-sub" id="kpi-jitter"></div>
+    </div>
+    <div class="kpi-card orange">
+      <div class="kpi-label">✦ Uptime</div>
+      <div class="kpi-value" id="kpi-uptime">—<span class="kpi-unit">%</span></div>
+      <div class="kpi-sub" id="kpi-tests"></div>
+    </div>
+    <div class="kpi-card red">
+      <div class="kpi-label">⚠ Falhas</div>
+      <div class="kpi-value" id="kpi-fails">—</div>
+      <div class="kpi-sub" id="kpi-fails-sub"></div>
+    </div>
+  </div>
+
+  <!-- Charts -->
+  <div class="charts-grid">
+    <div class="chart-card chart-full">
+      <h3><span class="dot" style="background:var(--accent)"></span>Velocidade ao longo do tempo</h3>
+      <div class="chart-wrap" style="height:220px">
+        <canvas id="timelineChart"></canvas>
+      </div>
+    </div>
+
+    <div class="chart-card">
+      <h3><span class="dot" style="background:var(--green)"></span>Ping &amp; Jitter</h3>
+      <div class="chart-wrap" style="height:200px">
+        <canvas id="pingChart"></canvas>
+      </div>
+    </div>
+
+    <div class="chart-card">
+      <h3><span class="dot" style="background:var(--orange)"></span>Download Diário (média)</h3>
+      <div class="chart-wrap" style="height:200px">
+        <canvas id="dailyChart"></canvas>
+      </div>
+    </div>
+
+    <div class="chart-card chart-full">
+      <h3><span class="dot" style="background:var(--accent3)"></span>Heatmap — Velocidade por Hora / Dia da Semana</h3>
+      <div id="heatmapContainer"></div>
+    </div>
+  </div>
+
+  <!-- Bottom row -->
+  <div class="bottom-row">
+    <div class="chart-card">
+      <h3><span class="dot" style="background:var(--red)"></span>Quedas e Instabilidades</h3>
+      <div style="overflow-x:auto">
+        <table class="outages-table">
+          <thead>
+            <tr>
+              <th>Início</th>
+              <th>Fim</th>
+              <th>Duração</th>
+              <th>Tipo</th>
+            </tr>
+          </thead>
+          <tbody id="outagesBody">
+            <tr><td colspan="4" style="color:var(--muted);text-align:center;padding:24px">Carregando…</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="chart-card">
+      <h3><span class="dot" style="background:var(--accent2)"></span>Último Teste</h3>
+      <div id="latestCard" style="display:flex;flex-direction:column;gap:12px;margin-top:4px"></div>
+    </div>
+  </div>
+</main>
+
+<script>
+// ── Config ────────────────────────────────────────────────────────────────────
+const API = (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
+  ? 'http://localhost:8000'
+  : `${window.location.protocol}//${window.location.hostname}:8000`;
+
+let currentPeriod = 30;
+
+// Chart.js global defaults
+Chart.defaults.color = '#64748b';
+Chart.defaults.borderColor = 'rgba(255,255,255,0.06)';
+Chart.defaults.font.family = "'JetBrains Mono', monospace";
+Chart.defaults.font.size = 11;
+
+// ── Charts state ──────────────────────────────────────────────────────────────
+let timelineChart, pingChart, dailyChart;
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+const $ = id => document.getElementById(id);
+const fmt = (v, d=1) => v != null ? Number(v).toFixed(d) : '—';
+const fmtDate = iso => {
+  const d = new Date(iso);
+  return d.toLocaleString('pt-BR', { day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit' });
+};
+const fmtDuration = (start, end) => {
+  const ms = new Date(end) - new Date(start);
+  const m = Math.round(ms / 60000);
+  if (m < 60) return `${m} min`;
+  return `${Math.floor(m/60)}h ${m%60}m`;
+};
+
+// ── Period selector ───────────────────────────────────────────────────────────
+function setPeriod(p) {
+  currentPeriod = p;
+  document.querySelectorAll('.period-btn').forEach(b => {
+    b.classList.toggle('active', +b.dataset.p === p);
+  });
+  loadAll();
+}
+
+// ── Fetch helpers ─────────────────────────────────────────────────────────────
+async function apiFetch(path) {
+  const r = await fetch(`${API}${path}`);
+  if (!r.ok) throw new Error(`HTTP ${r.status}`);
+  return r.json();
+}
+
+// ── KPI Cards ─────────────────────────────────────────────────────────────────
+async function loadSummary() {
+  const d = await apiFetch(`/api/summary?days=${currentPeriod}`);
+  $('kpi-dl').innerHTML    = `${fmt(d.avg_download)}<span class="kpi-unit">Mbps</span>`;
+  $('kpi-dl-max').textContent = `Máx: ${fmt(d.max_download)} Mbps`;
+  $('kpi-ul').innerHTML    = `${fmt(d.avg_upload)}<span class="kpi-unit">Mbps</span>`;
+  $('kpi-ping').innerHTML  = `${fmt(d.avg_ping)}<span class="kpi-unit">ms</span>`;
+  $('kpi-jitter').textContent = `Jitter: ${fmt(d.avg_jitter)} ms`;
+  $('kpi-uptime').innerHTML = `${fmt(d.uptime_pct, 1)}<span class="kpi-unit">%</span>`;
+  $('kpi-tests').textContent = `${d.total_tests} testes`;
+  $('kpi-fails').textContent = d.failed_tests ?? '—';
+  $('kpi-fails-sub').textContent = `nos últimos ${currentPeriod} dias`;
+}
+
+// ── Timeline Chart ────────────────────────────────────────────────────────────
+async function loadTimeline() {
+  const data = await apiFetch(`/api/hourly?days=${Math.min(currentPeriod,30)}`);
+  const labels = data.map(r => new Date(r.hour));
+  const dl = data.map(r => r.avg_download);
+  const ul = data.map(r => r.avg_upload);
+
+  const cfg = {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [
+        {
+          label: 'Download (Mbps)',
+          data: dl,
+          borderColor: '#3b82f6',
+          backgroundColor: 'rgba(59,130,246,0.08)',
+          fill: true,
+          tension: 0.4,
+          pointRadius: 0,
+          pointHoverRadius: 4,
+          borderWidth: 2,
+        },
+        {
+          label: 'Upload (Mbps)',
+          data: ul,
+          borderColor: '#8b5cf6',
+          backgroundColor: 'rgba(139,92,246,0.05)',
+          fill: true,
+          tension: 0.4,
+          pointRadius: 0,
+          pointHoverRadius: 4,
+          borderWidth: 2,
+        },
+      ],
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      interaction: { mode: 'index', intersect: false },
+      scales: {
+        x: {
+          type: 'time',
+          time: { unit: 'day', displayFormats: { day: 'dd/MM' } },
+          grid: { color: 'rgba(255,255,255,0.04)' },
+        },
+        y: {
+          grid: { color: 'rgba(255,255,255,0.04)' },
+          ticks: { callback: v => `${v} M` },
+        },
+      },
+      plugins: {
+        legend: { labels: { boxWidth: 10, padding: 16 } },
+        tooltip: {
+          callbacks: { label: ctx => ` ${ctx.dataset.label}: ${fmt(ctx.raw)} Mbps` }
+        },
+      },
+    },
+  };
+
+  if (timelineChart) { timelineChart.destroy(); }
+  timelineChart = new Chart($('timelineChart'), cfg);
+}
+
+// ── Ping Chart ────────────────────────────────────────────────────────────────
+async function loadPingChart() {
+  const data = await apiFetch(`/api/hourly?days=${Math.min(currentPeriod,30)}`);
+  const labels = data.map(r => new Date(r.hour));
+  const ping   = data.map(r => r.avg_ping);
+  const jitter = data.map(r => r.avg_jitter);
+
+  const cfg = {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [
+        {
+          label: 'Ping (ms)',
+          data: ping,
+          borderColor: '#10b981',
+          tension: 0.4, pointRadius: 0, borderWidth: 2,
+          backgroundColor: 'rgba(16,185,129,0.06)', fill: true,
+        },
+        {
+          label: 'Jitter (ms)',
+          data: jitter,
+          borderColor: '#f59e0b',
+          tension: 0.4, pointRadius: 0, borderWidth: 1.5,
+          borderDash: [4,3],
+        },
+      ],
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      interaction: { mode: 'index', intersect: false },
+      scales: {
+        x: { type: 'time', time: { unit: 'day', displayFormats: { day: 'dd/MM' } }, grid: { color: 'rgba(255,255,255,0.04)' } },
+        y: { grid: { color: 'rgba(255,255,255,0.04)' }, ticks: { callback: v => `${v}ms` } },
+      },
+      plugins: { legend: { labels: { boxWidth: 10 } } },
+    },
+  };
+  if (pingChart) pingChart.destroy();
+  pingChart = new Chart($('pingChart'), cfg);
+}
+
+// ── Daily Bar Chart ───────────────────────────────────────────────────────────
+async function loadDailyChart() {
+  const data = await apiFetch(`/api/daily?days=${currentPeriod}`);
+  const labels = data.map(r => new Date(r.day));
+  const dl     = data.map(r => r.avg_download);
+
+  // Color bars by quality
+  const max = Math.max(...dl.filter(Boolean));
+  const colors = dl.map(v => {
+    const ratio = v / max;
+    if (ratio >= 0.8) return 'rgba(16,185,129,0.7)';
+    if (ratio >= 0.5) return 'rgba(59,130,246,0.7)';
+    if (ratio >= 0.25) return 'rgba(245,158,11,0.7)';
+    return 'rgba(239,68,68,0.7)';
+  });
+
+  const cfg = {
+    type: 'bar',
+    data: {
+      labels,
+      datasets: [{
+        label: 'Download (Mbps)',
+        data: dl,
+        backgroundColor: colors,
+        borderRadius: 4,
+        borderSkipped: false,
+      }],
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      scales: {
+        x: { type: 'time', time: { unit: 'day', displayFormats: { day: 'dd/MM' } }, grid: { display: false } },
+        y: { grid: { color: 'rgba(255,255,255,0.04)' }, ticks: { callback: v => `${v}M` } },
+      },
+      plugins: {
+        legend: { display: false },
+        tooltip: { callbacks: { label: ctx => ` ${fmt(ctx.raw)} Mbps` } },
+      },
+    },
+  };
+  if (dailyChart) dailyChart.destroy();
+  dailyChart = new Chart($('dailyChart'), cfg);
+}
+
+// ── Heatmap ───────────────────────────────────────────────────────────────────
+const DOW_LABELS  = ['Dom','Seg','Ter','Qua','Qui','Sex','Sáb'];
+const HOUR_LABELS = Array.from({length:24}, (_,i) => `${i}h`);
+
+async function loadHeatmap() {
+  const data = await apiFetch('/api/heatmap');
+
+  // Build lookup: [dow][hour] = avg_download
+  const grid = Array.from({length:7}, () => Array(24).fill(null));
+  data.forEach(r => { grid[r.dow][r.hour_of_day] = r.avg_download; });
+
+  const allVals = data.map(r => r.avg_download).filter(Boolean);
+  const hMin = Math.min(...allVals);
+  const hMax = Math.max(...allVals);
+
+  function cellColor(val) {
+    if (val == null) return '#181d2e';
+    const t = (val - hMin) / (hMax - hMin || 1);
+    // Red → Orange → Green
+    if (t < 0.33) {
+      const r = 239, g = Math.round(68 + (158-68)*(t/0.33)), b = 68;
+      return `rgba(${r},${g},${b},0.7)`;
+    } else if (t < 0.66) {
+      const tt = (t-0.33)/0.33;
+      const r = Math.round(245 - (245-16)*tt), g = Math.round(158 + (185-158)*tt), b = Math.round(11 + (129-11)*tt);
+      return `rgba(${r},${g},${b},0.7)`;
+    } else {
+      const tt = (t-0.66)/0.34;
+      return `rgba(${Math.round(16*(1-tt)+59*tt)},${Math.round(185*(1-tt)+130*tt)},${Math.round(129*(1-tt)+246*tt)},0.7)`;
+    }
+  }
+
+  let html = '<div class="heatmap-grid">';
+  // Header row
+  html += '<div class="hm-cell hm-label"></div>';
+  HOUR_LABELS.forEach(h => {
+    html += `<div class="hm-cell hm-label" style="font-size:8px;color:var(--muted)">${h}</div>`;
+  });
+  // Data rows
+  DOW_LABELS.forEach((day, dow) => {
+    html += `<div class="hm-cell hm-label">${day}</div>`;
+    for (let h = 0; h < 24; h++) {
+      const v = grid[dow][h];
+      const bg = cellColor(v);
+      const tip = v != null ? `${fmt(v)} Mbps` : 'Sem dados';
+      html += `<div class="hm-cell hm-data" style="background:${bg}" title="${day} ${h}h — ${tip}"></div>`;
+    }
+  });
+  html += '</div>';
+
+  const container = $('heatmapContainer');
+  container.innerHTML = html;
+}
+
+// ── Outages ───────────────────────────────────────────────────────────────────
+async function loadOutages() {
+  const data = await apiFetch(`/api/outages?days=${currentPeriod}`);
+  const tbody = $('outagesBody');
+  if (!data.length) {
+    tbody.innerHTML = `<tr><td colspan="4" style="color:var(--green);text-align:center;padding:24px">✓ Nenhuma queda registrada</td></tr>`;
+    return;
+  }
+  tbody.innerHTML = data.slice(0,20).map(r => `
+    <tr>
+      <td>${fmtDate(r.started_at)}</td>
+      <td>${fmtDate(r.ended_at)}</td>
+      <td>${fmtDuration(r.started_at, r.ended_at)}</td>
+      <td><span class="badge badge-${r.status}">${r.status}</span></td>
+    </tr>`
+  ).join('');
+}
+
+// ── Latest test card ──────────────────────────────────────────────────────────
+async function loadLatest() {
+  try {
+    const d = await apiFetch('/api/latest');
+    const el = $('latestCard');
+    const metric = (icon, label, value, unit, color='var(--text)') =>
+      `<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--border)">
+        <span style="color:var(--muted);font-size:12px">${icon} ${label}</span>
+        <span style="font-family:'JetBrains Mono',monospace;font-weight:600;color:${color}">${fmt(value)} <span style="color:var(--muted);font-size:10px">${unit}</span></span>
+      </div>`;
+
+    const pingColor = d.ping < 30 ? 'var(--green)' : d.ping < 80 ? 'var(--orange)' : 'var(--red)';
+
+    el.innerHTML = `
+      <div style="font-size:11px;color:var(--muted);margin-bottom:4px">
+        🕐 ${fmtDate(d.tested_at)}
+        ${d.isp ? `<span style="float:right">${d.isp}</span>` : ''}
+      </div>
+      ${metric('↓','Download', d.download, 'Mbps', 'var(--accent)')}
+      ${metric('↑','Upload',   d.upload,   'Mbps', 'var(--accent3)')}
+      ${metric('⏱','Ping',     d.ping,     'ms',   pingColor)}
+      ${metric('〜','Jitter',   d.jitter,   'ms')}
+    `;
+    $('lastUpdate').textContent = fmtDate(d.tested_at);
+  } catch(e) {
+    $('latestCard').innerHTML = `<p style="color:var(--muted);font-size:12px">Sem dados ainda.</p>`;
+  }
+}
+
+// ── Main load ─────────────────────────────────────────────────────────────────
+async function loadAll() {
+  try {
+    await Promise.all([
+      loadSummary(),
+      loadTimeline(),
+      loadPingChart(),
+      loadDailyChart(),
+      loadHeatmap(),
+      loadOutages(),
+      loadLatest(),
+    ]);
+  } catch(e) {
+    console.warn('Partial load error:', e);
+  }
+}
+
+// ── Init ──────────────────────────────────────────────────────────────────────
+(async () => {
+  await loadAll();
+  $('loading').classList.add('hidden');
+  setInterval(loadLatest, 60_000);
+  setInterval(loadSummary, 60_000);
+})();
+</script>
+</body>
+</html>
