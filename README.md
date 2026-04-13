@@ -21,7 +21,7 @@ Aguarde ~30 segundos para o banco inicializar e o primeiro teste rodar.
 | Serviço   | URL                          |
 |-----------|------------------------------|
 | Dashboard | http://localhost:3001        |
-| API REST  | http://localhost:8000/docs   |
+| API REST  | http://localhost:8001/docs   |
 
 ---
 
@@ -39,7 +39,7 @@ Aguarde ~30 segundos para o banco inicializar e o primeiro teste rodar.
 │                               │ queries     │
 │  ┌──────────┐   REST   ┌──────▼───────┐     │
 │  │ Nginx    │ ◄─────── │  FastAPI     │     │
-│  │ Frontend │          │  (porta 8000)│     │
+│  │ Frontend │          │  (porta 8001)│     │
 │  │(porta 3001)         └─────────────┘     │
 │  └──────────┘                               │
 └─────────────────────────────────────────────┘
