@@ -76,6 +76,68 @@ environment:
 - **Packet Loss** (%) — perda de pacotes
 - **Status** — ok / error / timeout
 
+## 🔐 Autenticação
+
+- O dashboard agora exige login para acessar os endpoints `/api/*`.
+- Sessão baseada em cookie `HttpOnly`.
+- Usuário inicial criado automaticamente no primeiro startup da API:
+  - `DEFAULT_ADMIN_USERNAME` (padrão: `admin`)
+  - `DEFAULT_ADMIN_PASSWORD` (padrão: `admin123`)
+
+⚠️ **Troque imediatamente em produção** usando variáveis de ambiente seguras.
+
+## 🧾 Relatório PDF
+
+- Botão **Gerar PDF** disponível na dashboard.
+- O PDF inclui:
+  - KPIs do período
+  - Resumo diário
+  - Resumo horário (últimas 48h do período)
+  - Quedas e instabilidades
+  - Último teste do período
+- O período segue o seletor ativo da dashboard (7d/30d/60d/90d).
+
+Endpoint direto:
+
+```bash
+GET /api/report/pdf?days=30
+```
+
+Também aceita intervalo customizado:
+
+```bash
+GET /api/report/pdf?start_date=2026-04-01&end_date=2026-04-13
+```
+
+## 🕒 Fuso Horário (Brasília)
+
+- Serviços com `TZ=America/Sao_Paulo`.
+- PostgreSQL com `PGTZ=America/Sao_Paulo`.
+- Views agregadas usam conversão explícita com `AT TIME ZONE 'America/Sao_Paulo'` para manter heatmap e agregações coerentes.
+
+## 🛡️ Deploy sem perda de dados (servidor principal)
+
+Antes de atualizar:
+
+```bash
+# 1) Backup lógico
+docker compose exec -T db pg_dump -U netwatch -d netwatch > backup_netwatch.sql
+
+# 2) Snapshot dos volumes (opcional, recomendado)
+docker volume ls | grep postgres_data
+```
+
+Deploy recomendado:
+
+```bash
+docker compose up -d --build
+```
+
+Notas importantes:
+
+- Não use `docker compose down -v` no servidor principal, pois remove o volume do banco.
+- A API aplica migrações idempotentes no startup (sem apagar `speed_tests`).
+
 ## 📈 Visualizações do Dashboard
 
 | Painel | O que mostra |

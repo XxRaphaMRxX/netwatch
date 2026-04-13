@@ -9,6 +9,8 @@ services:
       POSTGRES_DB: netwatch
       POSTGRES_USER: netwatch
       POSTGRES_PASSWORD: netwatch_secret
+      TZ: America/Sao_Paulo
+      PGTZ: America/Sao_Paulo
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./backend/init.sql:/docker-entrypoint-initdb.d/init.sql
@@ -36,6 +38,7 @@ services:
       DB_USER: netwatch
       DB_PASSWORD: netwatch_secret
       TEST_INTERVAL_MINUTES: 15
+      TZ: America/Sao_Paulo
     networks:
       - netwatch_net
 
@@ -54,6 +57,14 @@ services:
       DB_NAME: netwatch
       DB_USER: netwatch
       DB_PASSWORD: netwatch_secret
+      TZ: America/Sao_Paulo
+      APP_TIMEZONE: America/Sao_Paulo
+      DEFAULT_ADMIN_USERNAME: admin
+      DEFAULT_ADMIN_PASSWORD: admin123
+      SESSION_SECRET: change-me-in-production
+      SESSION_COOKIE_SECURE: "false"
+      SESSION_COOKIE_SAMESITE: lax
+      CORS_ORIGINS: http://localhost:3000,http://127.0.0.1:3000
     ports:
       - "8000:8000"
     networks:
@@ -67,6 +78,8 @@ services:
     restart: unless-stopped
     depends_on:
       - api
+    environment:
+      TZ: America/Sao_Paulo
     ports:
       - "3000:80"
     networks:

@@ -55,6 +55,35 @@ header {
 
 .header-right { display: flex; align-items: center; gap: 16px; }
 
+.header-actions { display: flex; align-items: center; gap: 8px; }
+
+.action-btn {
+  background: linear-gradient(135deg, var(--accent), var(--accent2));
+  border: none;
+  color: #fff;
+  font-family: 'Syne', sans-serif;
+  font-size: 12px;
+  font-weight: 700;
+  padding: 7px 12px;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.action-btn.secondary {
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--muted);
+}
+
+.user-chip {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 6px 10px;
+}
+
 .live-badge {
   display: flex; align-items: center; gap: 6px;
   font-family: 'JetBrains Mono', monospace;
@@ -218,6 +247,56 @@ main { padding: 24px 32px; }
 @keyframes spin { to { transform: rotate(360deg); } }
 #loading p { font-size: 13px; color: var(--muted); }
 
+#authOverlay {
+  position: fixed; inset: 0;
+  background: rgba(11,14,23,0.92);
+  display: none;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  padding: 16px;
+}
+
+#authOverlay.show { display: flex; }
+
+.auth-card {
+  width: 100%;
+  max-width: 380px;
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 20px;
+}
+
+.auth-card h2 {
+  margin-bottom: 14px;
+  font-size: 18px;
+}
+
+.auth-label {
+  font-size: 11px;
+  color: var(--muted);
+  margin: 10px 0 6px;
+  display: block;
+}
+
+.auth-input {
+  width: 100%;
+  background: var(--bg3);
+  border: 1px solid var(--border);
+  color: var(--text);
+  border-radius: 8px;
+  padding: 10px;
+  font-family: 'JetBrains Mono', monospace;
+}
+
+.auth-error {
+  font-size: 12px;
+  color: var(--red);
+  min-height: 18px;
+  margin-top: 8px;
+}
+
 /* ── Responsive ── */
 @media(max-width: 900px) {
   main { padding: 16px; }
@@ -231,6 +310,19 @@ main { padding: 24px 32px; }
 <div id="loading">
   <div class="spinner"></div>
   <p>Carregando dados de rede…</p>
+</div>
+
+<div id="authOverlay">
+  <form class="auth-card" id="loginForm">
+    <h2>Acesso Seguro</h2>
+    <p style="font-size:12px;color:var(--muted)">Entre com seu usuario para acessar o dashboard.</p>
+    <label class="auth-label" for="loginUser">Usuario</label>
+    <input class="auth-input" id="loginUser" name="username" autocomplete="username" required/>
+    <label class="auth-label" for="loginPass">Senha</label>
+    <input class="auth-input" id="loginPass" name="password" type="password" autocomplete="current-password" required/>
+    <div class="auth-error" id="authError"></div>
+    <button class="action-btn" type="submit" style="width:100%;margin-top:6px">Entrar</button>
+  </form>
 </div>
 
 <header>
@@ -248,6 +340,11 @@ main { padding: 24px 32px; }
       <button class="period-btn active" onclick="setPeriod(30)" data-p="30">30d</button>
       <button class="period-btn" onclick="setPeriod(60)" data-p="60">60d</button>
       <button class="period-btn" onclick="setPeriod(90)" data-p="90">90d</button>
+    </div>
+    <div class="header-actions">
+      <button class="action-btn" onclick="generateReport()">Gerar PDF</button>
+      <span class="user-chip" id="currentUser">--</span>
+      <button class="action-btn secondary" onclick="logout()">Sair</button>
     </div>
   </div>
 </header>
@@ -341,11 +438,10 @@ main { padding: 24px 32px; }
 
 <script>
 // ── Config ────────────────────────────────────────────────────────────────────
-const API = (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
-  ? 'http://localhost:8000'
-  : `${window.location.protocol}//${window.location.hostname}:8000`;
+const API = '';
 
 let currentPeriod = 30;
+let isAuthenticated = false;
 
 // Chart.js global defaults
 Chart.defaults.color = '#64748b';
@@ -380,10 +476,98 @@ function setPeriod(p) {
 }
 
 // ── Fetch helpers ─────────────────────────────────────────────────────────────
-async function apiFetch(path) {
-  const r = await fetch(`${API}${path}`);
+async function apiFetch(path, options = {}) {
+  const r = await fetch(`${API}${path}`, {
+    credentials: 'include',
+    ...options,
+  });
+  if (r.status === 401) {
+    isAuthenticated = false;
+    showAuthOverlay('Sua sessao expirou. Faca login novamente.');
+    throw new Error('HTTP 401');
+  }
   if (!r.ok) throw new Error(`HTTP ${r.status}`);
   return r.json();
+}
+
+async function apiFetchBlob(path) {
+  const r = await fetch(`${API}${path}`, { credentials: 'include' });
+  if (r.status === 401) {
+    isAuthenticated = false;
+    showAuthOverlay('Sua sessao expirou. Faca login novamente.');
+    throw new Error('HTTP 401');
+  }
+  if (!r.ok) throw new Error(`HTTP ${r.status}`);
+  return r.blob();
+}
+
+function showAuthOverlay(msg = '') {
+  $('authError').textContent = msg;
+  $('authOverlay').classList.add('show');
+  $('loading').classList.add('hidden');
+}
+
+function hideAuthOverlay() {
+  $('authError').textContent = '';
+  $('authOverlay').classList.remove('show');
+}
+
+async function ensureAuth() {
+  try {
+    const d = await apiFetch('/api/auth/me');
+    isAuthenticated = true;
+    $('currentUser').textContent = d.user.username;
+    hideAuthOverlay();
+    return true;
+  } catch (e) {
+    isAuthenticated = false;
+    $('currentUser').textContent = '--';
+    showAuthOverlay('Entre para acessar os dados.');
+    return false;
+  }
+}
+
+async function login(username, password) {
+  const d = await apiFetch('/api/auth/login', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ username, password }),
+  });
+  isAuthenticated = true;
+  $('currentUser').textContent = d.user.username;
+  hideAuthOverlay();
+}
+
+async function logout() {
+  try {
+    await apiFetch('/api/auth/logout', { method: 'POST' });
+  } catch (e) {
+    // no-op
+  }
+  isAuthenticated = false;
+  $('currentUser').textContent = '--';
+  showAuthOverlay('Voce saiu da sessao.');
+}
+
+async function generateReport() {
+  if (!isAuthenticated) {
+    showAuthOverlay('Entre para gerar relatorios.');
+    return;
+  }
+  try {
+    const blob = await apiFetchBlob(`/api/report/pdf?days=${currentPeriod}`);
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    const ts = new Date().toISOString().replace(/[:.]/g, '-');
+    a.href = url;
+    a.download = `netwatch-report-${currentPeriod}d-${ts}.pdf`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  } catch (e) {
+    console.warn('Erro ao gerar PDF:', e);
+  }
 }
 
 // ── KPI Cards ─────────────────────────────────────────────────────────────────
@@ -652,6 +836,7 @@ async function loadLatest() {
 
 // ── Main load ─────────────────────────────────────────────────────────────────
 async function loadAll() {
+  if (!isAuthenticated) return;
   try {
     await Promise.all([
       loadSummary(),
@@ -669,11 +854,36 @@ async function loadAll() {
 
 // ── Init ──────────────────────────────────────────────────────────────────────
 (async () => {
-  await loadAll();
-  $('loading').classList.add('hidden');
-  setInterval(loadLatest, 60_000);
-  setInterval(loadSummary, 60_000);
+  const ok = await ensureAuth();
+  if (ok) {
+    await loadAll();
+    $('loading').classList.add('hidden');
+  }
+  setInterval(async () => {
+    if (isAuthenticated) await loadLatest();
+  }, 60_000);
+  setInterval(async () => {
+    if (isAuthenticated) await loadSummary();
+  }, 60_000);
 })();
+
+$('loginForm').addEventListener('submit', async (ev) => {
+  ev.preventDefault();
+  const username = $('loginUser').value.trim();
+  const password = $('loginPass').value;
+  if (!username || !password) {
+    showAuthOverlay('Informe usuario e senha.');
+    return;
+  }
+
+  try {
+    await login(username, password);
+    await loadAll();
+    $('loading').classList.add('hidden');
+  } catch (e) {
+    showAuthOverlay('Credenciais invalidas.');
+  }
+});
 </script>
 </body>
 </html>
