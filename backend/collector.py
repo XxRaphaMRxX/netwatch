@@ -12,7 +12,6 @@ import subprocess
 from datetime import datetime, timezone
 
 import psycopg2
-from psycopg2.extras import execute_values
 
 logging.basicConfig(
     level=logging.INFO,
@@ -41,6 +40,13 @@ def get_conn():
             log.warning("DB not ready (%s), retry %d/10…", e, attempt + 1)
             time.sleep(5)
     raise RuntimeError("Cannot connect to database after 10 attempts")
+
+
+def ensure_conn(conn):
+    if conn is None or conn.closed != 0:
+        log.warning("Database connection is closed. Reconnecting…")
+        return get_conn()
+    return conn
 
 
 def insert_result(conn, row: dict):
@@ -123,6 +129,7 @@ def main():
     while True:
         row = run_speedtest()
         try:
+            conn = ensure_conn(conn)
             insert_result(conn, row)
             log.info(
                 "Saved: ↓%.1f Mbps  ↑%.1f Mbps  ping=%.0f ms  status=%s",
@@ -133,10 +140,23 @@ def main():
         except Exception as e:
             log.error("DB error: %s", e)
             try:
-                conn.rollback()
-                conn = get_conn()
+                if conn and conn.closed == 0:
+                    conn.rollback()
             except Exception:
-                pass
+                log.warning("Rollback failed; will reconnect.")
+
+            try:
+                conn = get_conn()
+                log.info("Reconnected to database. Retrying save once…")
+                insert_result(conn, row)
+                log.info(
+                    "Saved after reconnect: ↓%.1f Mbps  ↑%.1f Mbps  ping=%.0f ms  status=%s",
+                    row["download"] or 0, row["upload"] or 0,
+                    row["ping"] or 0, row["status"],
+                )
+                refresh_views(conn)
+            except Exception as retry_err:
+                log.error("Retry after reconnect failed: %s", retry_err)
 
         log.info("Sleeping %d minutes…", INTERVAL // 60)
         time.sleep(INTERVAL)
